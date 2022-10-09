@@ -72,13 +72,11 @@ def step(state, key, params):
     y, mu = observation_step(key_observation, x, state.mu, params)
 
     state_next = state.replace(x=x, mu=mu)
-
     memory = DataHist(x=x, y=y)
-
     return state_next, memory
 
 
-def non_markovian_gsm(key, params, num_steps):
+def simulate(key, params, num_steps):
     """
     Non-Markovian Gaussian Sequence Model
     """
