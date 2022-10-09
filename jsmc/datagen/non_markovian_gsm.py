@@ -1,5 +1,16 @@
+"""
+Non-Markvoian Gaussian Sequence Model (NM-GSM)
+implementation.
+
+We assume that the system is described by 
+    x_t = \phi x_{t-1} + \epsilon_t 
+    y_t = \sum_{i=0}^t \beta^{t-i} x_i + \eta_t
+
+with x0 = 0.0
+"""
 import jax
 import chex
+import distrax
 import jax.numpy as jnp
 from functools import partial
 
@@ -82,10 +93,70 @@ def simulate(key, params, num_steps):
     """
     key_init, keys_steps = jax.random.split(key)
     keys_steps = jax.random.split(keys_steps, num_steps)
-    x_init = jax.random.normal(key_init) * jnp.sqrt(params.q)
+    # x_init = jax.random.normal(key_init)
+    x_init = 0.0
     state = State(x=x_init, mu=0)
 
     partial_step = partial(step, params=params)
     _, steps = jax.lax.scan(partial_step, state, keys_steps)
 
     return steps
+
+
+def step_target_mean(carry_row, row, params, x_latent):
+    """
+    Helper function to build means of non-Markovian
+    GSM one row at a time.
+    """
+    carry_row = carry_row * params.beta + row
+    mean_val = jnp.einsum("i,i->", x_latent, carry_row)
+    return carry_row, mean_val
+
+
+@jax.jit
+def eval_observation_mean(params, x_latent):
+    """
+    Evaluate the means of the observation distribution
+    given the latent estimates.
+    """
+    num_steps = x_latent.shape[0]
+    init_row = jnp.zeros(num_steps)
+    eval_rows = jnp.eye(num_steps)
+
+    partial_target = partial(step_target_mean, params=params, x_latent=x_latent)
+    _, means = jax.lax.scan(partial_target, init_row, eval_rows)
+
+    return means
+
+
+def step_latent_logpdf(x_prev, params):
+    mean =  params.phi * x_prev
+    logprob = distrax.Normal(loc=mean, scale=jnp.sqrt(params.q)).log_prob(x_prev)
+    return logprob
+
+
+def log_observation(x_latent, y_obs, params):
+    """
+    Log target density of the Non-Markovian Gaussian Sequence Model
+    """
+    mean_est = eval_observation_mean(params, x_latent)
+    log_probs = distrax.Normal(loc=mean_est, scale=jnp.sqrt(params.r)).log_prob(y_obs)
+    return log_probs
+
+
+def log_transition(x_latent, params):
+    """
+    Log target density of the Non-Markovian Gaussian Sequence Model
+    """
+    x_cond = jnp.roll(x_latent, 1).at[0].set(0.0)
+    log_probs = distrax.Normal(loc=x_cond, scale=jnp.sqrt(params.q)).log_prob(x_latent)
+    return log_probs
+
+
+@partial(jax.jit)
+def log_joint(x_latent, y_obs, params):
+    """
+    Log target density of the Non-Markovian Gaussian Sequence Model
+    """
+    log_probs = log_transition(x_latent, params) + log_observation(x_latent, y_obs, params)
+    return log_probs.sum()
