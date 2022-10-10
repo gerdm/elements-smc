@@ -140,7 +140,8 @@ def log_observation(x_latent, y_obs, params):
     Log target density of the Non-Markovian Gaussian Sequence Model
     """
     mean_est = eval_observation_mean(params, x_latent)
-    log_probs = distrax.Normal(loc=mean_est, scale=jnp.sqrt(params.r)).log_prob(y_obs)
+    scale_est = jnp.sqrt(params.r)
+    log_probs = distrax.Normal(loc=mean_est, scale=scale_est).log_prob(y_obs)
     return log_probs
 
 
@@ -148,7 +149,7 @@ def log_transition(x_latent, params):
     """
     Log target density of the Non-Markovian Gaussian Sequence Model
     """
-    x_cond = jnp.roll(x_latent, 1).at[0].set(0.0)
+    x_cond = jnp.roll(x_latent, 1).at[0].set(0.0) * params.phi
     log_probs = distrax.Normal(loc=x_cond, scale=jnp.sqrt(params.q)).log_prob(x_latent)
     return log_probs
 
