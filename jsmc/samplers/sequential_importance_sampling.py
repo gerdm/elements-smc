@@ -51,7 +51,7 @@ def step_accumulate_sample(key, state_sis, row, proposal):
     return carry_particles, sample_new
 
 
-def compound_elements(state, xs, proposal):
+def compound_elements(state: StateSIS, xs, proposal):
     key, row, y_obs = xs
     observations_new = step_accumulate_obs(state.observations, row, y_obs)
     vcounter_new = step_accumulate_count(state.vcounter, row)
@@ -71,13 +71,11 @@ def step_sis(state: StateSIS, xs, target, proposal):
     Update the weights
     """
     state_new, sample_new = compound_elements(state, xs, proposal)
-    observations_new = state_new.observations
-    particles_new = state_new.particles
 
     log_weigth_new = (state.log_weight_prev
-                    + target.logpdf(particles_new, observations_new) # x{1:t}
-                    - target.logpdf(state.particles, state.observations) # x{1:t-1}
-                    - proposal.logpdf(sample_new, state.particles)) # x{t} | x{1:t-1}
+                    + target.logpdf(state_new) # x{1:t}
+                    - target.logpdf(state) # x{1:t-1}
+                    - proposal.logpdf(sample_new, state)) # x{t} | x{1:t-1}
     
     state_new = state_new.replace(log_weight_prev=log_weigth_new)
     return state_new, (sample_new, log_weigth_new)
