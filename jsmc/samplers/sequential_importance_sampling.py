@@ -12,16 +12,16 @@ class StateSIS:
     ----------
     particle_count:
         history of sampled proposals
-    observations_compound:
+    observations:
         history of observations
-    selection_compound:
+    vcounter:
         zeros -> ones array of timesteps
     log_weights:
         log weights of the particles
     """
-    particles_compound: jnp.ndarray
-    observations_compound: jnp.ndarray
-    selection_compound: jnp.ndarray
+    particles: jnp.ndarray
+    observations: jnp.ndarray
+    vcounter: jnp.ndarray
     log_weights: jnp.ndarray
 
 
@@ -41,42 +41,43 @@ def step_accumulate_obs(row_carry, row_target, y_obs):
     return row_carry
 
 
-def step_accumulate_sample(key, carry_particles, row, proposal, carry_transform):
+def step_accumulate_sample(key, state_sis, row, proposal):
     """
     Accumulate the sample
     """
-    sample_new = proposal.sample(key, carry_particles)
-    carry_particles = carry_transform(carry_particles) + sample_new * row
+    carry_particles = state_sis.particles
+    sample_new = proposal.sample(key, state_sis)
+    carry_particles = carry_particles + sample_new * row
     return carry_particles, sample_new
 
 
-def compound_elements(state, xs, proposal, carry_transform):
+def compound_elements(state, xs, proposal):
     key, row, y_obs = xs
-    observations_compound_new = step_accumulate_obs(state.observations_compound, row, y_obs)
-    selection_compound_new = step_accumulate_count(state.selection_compound, row)
-    res_new = step_accumulate_sample(key, state.particles_compound, row, proposal, carry_transform)
-    particles_compound_new, sample_new = res_new
+    observations_new = step_accumulate_obs(state.observations, row, y_obs)
+    vcounter_new = step_accumulate_count(state.vcounter, row)
+    res_new = step_accumulate_sample(key, state, row, proposal)
+    particles_new, sample_new = res_new
 
     state = state.replace(
-        particles_compound=particles_compound_new,
-        observations_compound=observations_compound_new,
-        selection_compound=selection_compound_new,
+        particles=particles_new,
+        observations=observations_new,
+        vcounter=vcounter_new,
     )
     return state, sample_new
 
 
-def step_sis(state: StateSIS, xs, target, proposal, carry_transform):
+def step_sis(state: StateSIS, xs, target, proposal):
     """
     Update the weights
     """
-    state_new, sample_new = compound_elements(state, xs, proposal, carry_transform)
-    observations_compound_new = state_new.observations_compound
-    particles_compound_new = state_new.particles_compound
+    state_new, sample_new = compound_elements(state, xs, proposal)
+    observations_new = state_new.observations
+    particles_new = state_new.particles
 
     log_weigth_new = (state.log_weight_prev
-                    + target.logpdf(particles_compound_new, observations_compound_new) # x{1:t}
-                    - target.logpdf(state.particles_compound, state.observations_compound) # x{1:t-1}
-                    - proposal.logpdf(sample_new, state.particles_compound)) # x{t} | x{1:t-1}
+                    + target.logpdf(particles_new, observations_new) # x{1:t}
+                    - target.logpdf(state.particles, state.observations) # x{1:t-1}
+                    - proposal.logpdf(sample_new, state.particles)) # x{t} | x{1:t-1}
     
     state_new = state_new.replace(log_weight_prev=log_weigth_new)
     return state_new, (sample_new, log_weigth_new)
@@ -87,21 +88,21 @@ def init_sis(num_steps):
     Initialize the Sequential Importance Sampler
     """
     state = StateSIS(
-        particles_compound=jnp.zeros(num_steps),
-        observations_compound=jnp.zeros(num_steps),
-        selection_compound=jnp.zeros(num_steps),
+        particles=jnp.zeros(num_steps),
+        observations=jnp.zeros(num_steps),
+        vcounter=jnp.zeros(num_steps),
         log_weights=0.0
     )
     return state
 
 
-def eval(key, observations, target, proposal, carry_transform=None):
+def eval(key, observations, target, proposal):
     num_steps = len(observations)
     state_init = init_sis(num_steps)
     rows = jnp.eye(num_steps)
     keys = jax.random.split(key, num_steps)
 
     xs = (keys, rows, observations)
-    partial_step = partial(compound_elements, proposal=proposal, carry_transform=lambda x: x)
+    partial_step = partial(compound_elements, proposal=proposal)
     state, _ = jax.lax.scan(partial_step, state_init, xs)
     return state
