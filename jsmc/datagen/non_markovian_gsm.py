@@ -154,10 +154,10 @@ def log_transition(x_latent, params):
     return log_probs
 
 
-@partial(jax.jit)
+@jax.jit
 def log_joint(x_latent, y_obs, params):
     """
     Log target density of the Non-Markovian Gaussian Sequence Model
     """
     log_probs = log_transition(x_latent, params) + log_observation(x_latent, y_obs, params)
-    return log_probs.sum()
+    return log_probs

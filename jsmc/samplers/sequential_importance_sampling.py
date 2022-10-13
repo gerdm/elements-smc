@@ -72,13 +72,13 @@ def step_sis(state: StateSIS, xs, target, proposal):
     """
     state_new, sample_new = compound_elements(state, xs, proposal)
 
-    log_weigth_new = (state.log_weight_prev
+    log_weigth_new = (state.log_weights
                     + target.logpdf(state_new) # x{1:t}
                     - target.logpdf(state) # x{1:t-1}
                     - proposal.logpdf(sample_new, state)) # x{t} | x{1:t-1}
     
-    state_new = state_new.replace(log_weight_prev=log_weigth_new)
-    return state_new, (sample_new, log_weigth_new)
+    state_new = state_new.replace(log_weights=log_weigth_new)
+    return state_new, log_weigth_new
 
 
 def init_sis(num_steps):
@@ -101,6 +101,7 @@ def eval(key, observations, target, proposal):
     keys = jax.random.split(key, num_steps)
 
     xs = (keys, rows, observations)
-    partial_step = partial(compound_elements, proposal=proposal)
+    partial_step = partial(step_sis,
+                           proposal=proposal, target=target)
     state, _ = jax.lax.scan(partial_step, state_init, xs)
     return state
