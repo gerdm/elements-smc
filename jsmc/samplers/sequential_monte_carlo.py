@@ -81,6 +81,24 @@ def step_smc(state: State, xs, target, proposal):
     return state_new, log_weights_new
 
 
+def _step_smc(
+    state: State,
+    xs,
+    target,
+    proposal,
+):
+    """
+    SMC step for a single particle
+    """
+    raise NotImplementedError("Not implemented yet")
+    key, row, y_obs = xs
+    # 1. Resample
+    # 2. Propagate
+    res_new = step_accumulate_sample(key, state, row, proposal)
+    # 3. Concatenate
+    ...
+
+
 def init_smc(num_steps, num_particles):
     """
     Initialize the Sequential Importance Sampler
