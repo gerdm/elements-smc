@@ -1,28 +1,18 @@
 import jax
 import chex
 import jax.numpy as jnp
+from jaxtyping import Array, Float
 from functools import partial
+from typing import Callable
 
 @chex.dataclass
 class State:
     """
     State of the Sequential Importance Sampler
-
-    Parameters
-    ----------
-    particle_count:
-        history of sampled proposals
-    observations:
-        history of observations
-    vcounter:
-        zeros -> ones array of timesteps
-    log_weights:
-        log weights of the particles
     """
-    particles: chex.ArrayDevice
-    observations: chex.ArrayDevice
-    vcounter: chex.ArrayDevice
-    log_weights: chex.ArrayDevice
+    particles: Float[Array, "num_steps dim_particle"]
+    log_weights: Float[Array, "num_steps"]
+    step: int = 0
 
 
 def step_accumulate_count(row_carry, row_target):
@@ -84,31 +74,44 @@ def step_smc(state: State, xs, target, proposal):
 def _step_smc(
     state: State,
     xs,
-    target,
-    proposal,
+    proposal: Callable,
+    y: Float[Array, "num_steps dim_obs"],
 ):
     """
     SMC step for a single particle
     """
-    raise NotImplementedError("Not implemented yet")
     key, row, y_obs = xs
+    y_obs = row * y_obs # Masking observation
     # 1. Resample
+    ix_particle = jax.random.categorical(key, state.log_weights)
+    resample_particle = state.particles[ix_particle]
     # 2. Propagate
-    res_new = step_accumulate_sample(key, state, row, proposal)
-    # 3. Concatenate
-    ...
+    # TODO: Add additional input to sample proposal
+    particle_new = proposal.sample(key, resample_particle, y, state.step)
+    # 3. Concatenate and update state
+    particles_new = resample_particle.at[state.step].set(particle_new)
+    state_new = state.replace(particles=particles_new, step=state.step + 1)
+    return state_new
 
 
-def init_smc(num_steps, num_particles):
+def _init_state_single(_, num_steps, dim_particle):
     """
-    Initialize the Sequential Importance Sampler
+    Initialise single state of the particle SMC
     """
     state = State(
-        observations=jnp.zeros(num_steps),
-        vcounter=jnp.zeros(num_steps),
-        particles=jnp.zeros(num_particles, num_steps),
-        log_weights=jnp.zeros(num_particles),
+        step=0,
+        particles=jnp.zeros((num_steps, dim_particle)),
+        log_weights=jnp.zeros(num_steps),
     )
+    return state
+
+def _init_state(num_particles: int, num_steps: int, dim_particle: int):
+    """
+    Initialise the state of the particle SMC
+    """
+    dummyp = jnp.zeros(num_particles)
+    state = jax.vmap(_init_state_single, in_axes=(0, None, None))
+    state = state(dummyp, num_steps, dim_particle)
     return state
 
 
