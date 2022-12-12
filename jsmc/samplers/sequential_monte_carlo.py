@@ -15,21 +15,6 @@ class State:
     step: int = 0
 
 
-def step_smc(state: State, xs, target, proposal):
-    """
-    Update the weights
-    """
-    state_new, sample_new = compound_elements(state, xs, proposal)
-
-    log_weights_new = (state.log_weights
-                    + target.logpdf(state_new) # x{1:t}
-                    - target.logpdf(state) # x{1:t-1}
-                    - proposal.logpdf(sample_new, state)) # x{t} | x{1:t-1}
-    
-    state_new = state_new.replace(log_weights=log_weights_new)
-    return state_new, log_weights_new
-
-
 def _step_smc(
     key,
     state: State,
@@ -59,6 +44,21 @@ def _step_smc(
     return particles_new
 
 
+def estimate_log_weights(particles_new, state_old, target, proposal, y):
+    """
+    Compute the unnormalised log-weights of the new particles.
+    """
+    step = state_old.step
+    particles_old = state_old.particles
+    target_logpdf = jax.vmap(target.logpdf, in_axes=(0, None, None))
+    log_weights_new = (
+                    + target_logpdf(particles_new, step, y) # x{1:t}
+                    - target_logpdf(particles_old, step, y) # x{1:t-1}
+                    - proposal.logpdf(particles_new, state_old).squeeze().sum(axis=-1)) # x{t} | x{1:t-1}
+    
+    return log_weights_new
+
+
 def _init_state(num_particles: int, num_steps: int, dim_particle: int):
     """
     Initialise the state of the particle SMC. We assume that the
@@ -77,6 +77,28 @@ def _init_state(num_particles: int, num_steps: int, dim_particle: int):
         log_weights=log_weights_init,
     )
     return state
+
+
+def step_and_update(
+    key,
+    state: State,
+    y: Float[Array, "num_steps dim_obs"],
+    proposal: Callable,
+    target: Callable,
+):
+    num_particles = state.particles.shape[0]
+    keys = jax.random.split(key, num_particles)
+    particles_new = jax.vmap(_step_smc, in_axes=(0, None, None, None))
+    particles_new = particles_new(keys, state, proposal, y)
+
+    log_weights_new = estimate_log_weights(particles_new, state, target, proposal, y)
+
+    state_new = state.replace(
+        particles=particles_new,
+        step=state.step + 1,
+        log_weights=log_weights_new,
+    )
+    return state_new
 
 
 def eval(key, observations, target, proposal):

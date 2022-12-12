@@ -109,11 +109,10 @@ def step_target_mean(carry_row, row, params, x_latent):
     GSM one row at a time.
     """
     carry_row = carry_row * params.beta + row
-    mean_val = jnp.einsum("i,i->", x_latent, carry_row)
+    mean_val = jnp.einsum("i...,i->...", x_latent, carry_row)
     return carry_row, mean_val
 
 
-@jax.jit
 def eval_observation_mean(params, x_latent):
     """
     Evaluate the means of the observation distribution
@@ -154,7 +153,7 @@ def log_transition(x_latent, params):
     return log_probs
 
 
-@jax.jit
+partial(jax.jit, static_argnums=(2,))
 def log_joint(x_latent, y_obs, params):
     """
     Log target density of the Non-Markovian Gaussian Sequence Model
