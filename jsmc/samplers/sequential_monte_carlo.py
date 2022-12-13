@@ -50,11 +50,14 @@ def estimate_log_weights(particles_new, state_old, target, proposal, y):
     """
     step = state_old.step
     particles_old = state_old.particles
+    particles_new_last  = particles_new[:, state_old.step]
     target_logpdf = jax.vmap(target.logpdf, in_axes=(0, None, None))
+    proposal_logpdf = jax.vmap(proposal.logpdf, in_axes=(0, 0, None))
     log_weights_new = (
                     + target_logpdf(particles_new, step, y) # x{1:t}
                     - target_logpdf(particles_old, step, y) # x{1:t-1}
-                    - proposal.logpdf(particles_new, state_old).squeeze().sum(axis=-1)) # x{t} | x{1:t-1}
+                    - proposal_logpdf(particles_new_last, state_old.particles, step).squeeze() # x{t} | x{1:t-1}
+                    ) 
     
     return log_weights_new
 
