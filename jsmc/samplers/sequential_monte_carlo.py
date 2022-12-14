@@ -40,7 +40,7 @@ def _step_smc(
     # TODO: Add additional input to sample proposal.
     particle_new = proposal.sample(key, resample_particle, state.step, y)
     # 3. Concatenate and update state
-    particles_new = resample_particle.at[state.step].set(particle_new)
+    particles_new = resample_particle.at[state.step + 1].set(particle_new)
     return particles_new
 
 
@@ -48,15 +48,15 @@ def estimate_log_weights(particles_new, state_old, target, proposal, y):
     """
     Compute the unnormalised log-weights of the new particles.
     """
-    step = state_old.step
-    particles_old = state_old.particles
-    particles_new_last  = particles_new[:, state_old.step]
+    step_prev = state_old.step
+    state_next = state_old.step + 1
+    particles_new_last  = particles_new[:, state_next]
     target_logpdf = jax.vmap(target.logpdf, in_axes=(0, None, None))
     proposal_logpdf = jax.vmap(proposal.logpdf, in_axes=(0, 0, None))
     log_weights_new = (
-                    + target_logpdf(particles_new, step, y) # x{1:t}
-                    - target_logpdf(particles_old, step, y) # x{1:t-1}
-                    - proposal_logpdf(particles_new_last, state_old.particles, step).squeeze() # x{t} | x{1:t-1}
+                    + target_logpdf(particles_new, state_next, y) # x{1:t}
+                    - target_logpdf(particles_new, step_prev, y) # x{1:t-1}
+                    - proposal_logpdf(particles_new_last,  particles_new, step_prev).squeeze() # x{t} | x{1:t-1}
                     ) 
     
     return log_weights_new
@@ -91,6 +91,7 @@ def step_and_update(
 ):
     num_particles = state.particles.shape[0]
     keys = jax.random.split(key, num_particles)
+    # Resample and propagate
     particles_new = jax.vmap(_step_smc, in_axes=(0, None, None, None))
     particles_new = particles_new(keys, state, proposal, y)
 
@@ -102,22 +103,3 @@ def step_and_update(
         log_weights=log_weights_new,
     )
     return state_new
-
-
-def eval(key, observations, target, proposal):
-    num_steps = len(observations)
-    state_init = init_smc(num_steps)
-    rows = jnp.eye(num_steps)
-    keys = jax.random.split(key, num_steps)
-
-    xs = (keys, rows, observations)
-    partial_step = partial(
-        step_smc,
-        proposal=proposal,
-        target=target,
-    )
-    state, log_weights = jax.lax.scan(partial_step, state_init, xs)
-    state = state.replace(
-        log_weights=log_weights
-    )
-    return state
