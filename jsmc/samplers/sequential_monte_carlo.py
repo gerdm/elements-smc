@@ -33,12 +33,13 @@ def _step_smc(
           kinds of inputs to the proposal distribution
           in size and number of arguments.
     """
+    key_resample, key_propagate = jax.random.split(key)
     # 1. Resample
-    ix_particle = jax.random.categorical(key, state.log_weights)
+    ix_particle = jax.random.categorical(key_resample, state.log_weights)
     resample_particle = state.particles[ix_particle]
     # 2. Propagate
     # TODO: Add additional input to sample proposal.
-    particle_new = proposal.sample(key, resample_particle, state.step, y)
+    particle_new = proposal.sample(key_propagate, resample_particle, state.step, y)
     # 3. Concatenate and update state
     particles_new = resample_particle.at[state.step + 1].set(particle_new)
     return particles_new
