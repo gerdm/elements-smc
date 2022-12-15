@@ -44,22 +44,22 @@ def _step_smc(
     return particles_new
 
 
-def estimate_log_weights(particles_new, state_old, target, proposal, y):
+def estimate_log_weights(particles, state_old, target, proposal, y):
     """
     Compute the unnormalised log-weights of the new particles.
     """
     step_prev = state_old.step
     state_next = state_old.step + 1
-    particles_new_last  = particles_new[:, state_next]
+    particles_next  = particles[:, state_next]
     target_logpdf = jax.vmap(target.logpdf, in_axes=(0, None, None))
     proposal_logpdf = jax.vmap(proposal.logpdf, in_axes=(0, 0, None))
-    log_weights_new = (
-                    + target_logpdf(particles_new, state_next, y) # x{1:t}
-                    - target_logpdf(particles_new, step_prev, y) # x{1:t-1}
-                    - proposal_logpdf(particles_new_last,  particles_new, step_prev).squeeze() # x{t} | x{1:t-1}
+    log_weights = (
+                    + target_logpdf(particles, state_next, y) # x{1:t}
+                    - target_logpdf(particles, step_prev, y) # x{1:t-1}
+                    - proposal_logpdf(particles_next,  particles, step_prev).squeeze() # x{t} | x{1:t-1}
                     ) 
     
-    return log_weights_new
+    return log_weights
 
 
 def _init_state(num_particles: int, num_steps: int, dim_particle: int):
