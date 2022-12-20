@@ -42,7 +42,7 @@ def _step_smc(
     particle_new = proposal.sample(key_propagate, resample_particle, state.step, y)
     # 3. Concatenate and update state
     particles_new = resample_particle.at[state.step + 1].set(particle_new)
-    return particles_new
+    return particles_new, ix_particle
 
 
 def estimate_log_weights(particles, state_old, target, proposal, y):
@@ -95,7 +95,7 @@ def step_and_update(
     keys = jax.random.split(key, num_particles)
     # Resample and propagate
     particles_new = jax.vmap(_step_smc, in_axes=(0, None, None, None))
-    particles_new = particles_new(keys, state, proposal, y)
+    particles_new, ix_resampled = particles_new(keys, state, proposal, y)
 
     log_weights_new = estimate_log_weights(particles_new, state, target, proposal, y)
 
@@ -104,4 +104,4 @@ def step_and_update(
         step=state.step + 1,
         log_weights=log_weights_new,
     )
-    return state_new
+    return state_new, ix_resampled
