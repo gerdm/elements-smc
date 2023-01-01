@@ -64,7 +64,7 @@ def estimate_log_weights(particles, state_old, target, proposal, y):
     return log_weights
 
 
-def _init_state(num_particles: int, num_steps: int, dim_particle: int):
+def init_state(num_particles: int, num_steps: int, dim_particle: int):
     """
     Initialise the state of the particle SMC. We assume that the
     proposal distribution can consider samples from all previous
@@ -104,4 +104,5 @@ def step_and_update(
         step=state.step + 1,
         log_weights=log_weights_new,
     )
-    return state_new, ix_resampled
+    latest_particles = particles_new[:, state_new.step]
+    return state_new, ix_resampled, latest_particles
