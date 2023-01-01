@@ -101,7 +101,13 @@ def eval(key, observations, target, proposal):
     keys = jax.random.split(key, num_steps)
 
     xs = (keys, rows, observations)
-    partial_step = partial(step_sis,
-                           proposal=proposal, target=target)
-    state, _ = jax.lax.scan(partial_step, state_init, xs)
+    partial_step = partial(
+        step_sis,
+        proposal=proposal,
+        target=target,
+    )
+    state, log_weights = jax.lax.scan(partial_step, state_init, xs)
+    state = state.replace(
+        log_weights=log_weights
+    )
     return state
