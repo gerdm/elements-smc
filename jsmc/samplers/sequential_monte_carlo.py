@@ -29,16 +29,18 @@ def _step_smc(
     It's up to the user to make sure that the proposal distribution
     handles the inputs correctly.
 
-    TODO: We need a better way to handle the different
-          kinds of inputs to the proposal distribution
-          in size and number of arguments.
+    TODO: 1) Implement deque of size `num_buffer` to handle
+          varying sizes in the number of previous particles
+          available to the proposal distribution.
+    TODO: 2) Replace `y` input to `*args` and `**kwargs`
+         
     """
     key_resample, key_propagate = jax.random.split(key)
     # 1. Resample
     ix_particle = jax.random.categorical(key_resample, state.log_weights)
     resample_particle = state.particles[ix_particle]
     # 2. Propagate
-    # TODO: Add additional input to sample proposal.
+    # TODO: Add additional input to sample proposal (see 2. above)
     particle_new = proposal.sample(key_propagate, resample_particle, state.step, y)
     # 3. Concatenate and update state
     particles_new = resample_particle.at[state.step + 1].set(particle_new)
@@ -104,5 +106,5 @@ def step_and_update(
         step=state.step + 1,
         log_weights=log_weights_new,
     )
-    latest_particles = particles_new[:, state_new.step]
-    return state_new, ix_resampled, latest_particles
+    particle_new = particles_new[:, state_new.step]
+    return state_new, ix_resampled, particle_new
