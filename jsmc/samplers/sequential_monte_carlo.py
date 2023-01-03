@@ -95,9 +95,10 @@ def step_and_update(
 ):
     num_particles = state.particles.shape[0]
     keys = jax.random.split(key, num_particles)
-    # Resample and propagate
+    # Resample and propagate (#TODO: rename to `particles_resample_buffer`)
     particles_new = jax.vmap(_step_smc, in_axes=(0, None, None, None))
     particles_new, ix_resampled = particles_new(keys, state, proposal, y)
+    particle_new = particles_new[:, state.step + 1]
 
     log_weights_new = estimate_log_weights(particles_new, state, target, proposal, y)
 
@@ -106,5 +107,20 @@ def step_and_update(
         step=state.step + 1,
         log_weights=log_weights_new,
     )
-    particle_new = particles_new[:, state_new.step]
     return state_new, ix_resampled, particle_new
+
+
+def filter(key, y, state_init, proposal, target, num_steps):
+    raise NotImplementedError("Not implemented")
+    keys_filter = jax.random.split(key, num_steps)
+    def _step(state, key):
+        state, ix_resampled, particles = step_and_update(key, state, y, proposal, target)
+        output = {
+            "log_weights": state.log_weights,
+            "ix_resampled": ix_resampled,
+            "particles": particles,
+        }
+        return state, output
+    
+    state, output = jax.lax.scan(_step, state_init, keys_filter)
+    return state, output
